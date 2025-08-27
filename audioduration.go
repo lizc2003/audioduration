@@ -13,6 +13,7 @@ const (
 	TypeMp3  int = 2
 	TypeOgg  int = 3
 	TypeDsd  int = 4
+	TypeWav  int = 5
 )
 
 // Duration Get duration of specific music file type.
@@ -31,6 +32,8 @@ func Duration(file *os.File, filetype int) (float64, error) {
 		d, err = Ogg(file)
 	case TypeDsd:
 		d, err = DSD(file)
+	case TypeWav:
+		d, err = Wav(file)
 	default:
 		err = fmt.Errorf("unsupported type: %d", filetype)
 	}
