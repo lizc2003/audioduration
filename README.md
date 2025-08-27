@@ -1,5 +1,7 @@
 # Audio Duration
 
+This is a fork of https://github.com/hcl/audioduration
+
 A naive go module to get a audio file's duration in second.
 
 ## Usage
