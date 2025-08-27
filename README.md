@@ -5,7 +5,7 @@ A naive go module to get a audio file's duration in second.
 ## Usage
 
 ```go
-import github.com/hcl/audioduration
+import github.com/lizc2003/audioduration
 ```
 
 For an audio file (eg. `mp3` format)

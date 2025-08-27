@@ -1,3 +1,3 @@
-module github.com/hcl/audioduration
+module github.com/lizc2003/audioduration
 
-go 1.15
+go 1.24.2

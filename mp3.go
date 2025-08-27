@@ -46,35 +46,47 @@ func getSampleRate(mpegVer, sampleRateIndex uint8) int {
 // getBitRate Lookup bit rate.
 // https://www.codeproject.com/Articles/8295/MPEG-Audio-Frame-Header#Bitrate
 func getBitRate(mpegVer, layer, bitRateIndex uint8) int {
-	var bitRate int = 0
-	mpeg1BitRateTable := map[uint8][]int{
-		layerI: {0, 32, 64, 96, 128, 160, 192,
+	layerIdx := 0
+	switch layer {
+	case layerI:
+		layerIdx = 0
+	case layerII:
+		layerIdx = 1
+	case layerIII:
+		layerIdx = 2
+	default:
+		return 0
+	}
+
+	mpeg1BitRateTable := [][]int{
+		{0, 32, 64, 96, 128, 160, 192,
 			224, 256, 288, 320, 352, 384, 416, 448, 0}, // Layer I
-		layerII: {0, 32, 48, 56, 64, 80, 96, 112,
+		{0, 32, 48, 56, 64, 80, 96, 112,
 			128, 160, 192, 224, 256, 320, 384, 0}, // Layer II
-		layerIII: {0, 32, 40, 48, 56, 64, 80, 96,
+		{0, 32, 40, 48, 56, 64, 80, 96,
 			112, 128, 160, 192, 224, 256, 320, 0}, // Layer III
 	}
-	mpeg2BitRateTable := map[uint8][]int{
-		layerI: {0, 32, 48, 56, 64, 80, 96, 112,
+	mpeg2BitRateTable := [][]int{
+		{0, 32, 48, 56, 64, 80, 96, 112,
 			128, 144, 160, 176, 192, 224, 256, 0}, // Layer I
-		layerII: {0, 8, 16, 24, 32, 40, 48, 56,
+		{0, 8, 16, 24, 32, 40, 48, 56,
 			64, 80, 96, 112, 128, 144, 160, 0}, // Layer II
-		layerIII: {0, 8, 16, 24, 32, 40, 48, 56,
+		{0, 8, 16, 24, 32, 40, 48, 56,
 			64, 80, 96, 112, 128, 144, 160, 0}, // Layer III
 	}
 	switch mpegVer {
 	case mpeg1:
-		bitRate = mpeg1BitRateTable[layer][bitRateIndex]
+		return mpeg1BitRateTable[layerIdx][bitRateIndex]
 	case mpeg2, mpeg25:
-		bitRate = mpeg2BitRateTable[layer][bitRateIndex]
+		return mpeg2BitRateTable[layerIdx][bitRateIndex]
+	default:
+		return 0
 	}
-	return bitRate
 }
 
 // getSamples Lookup samples per frame.
 // https://www.codeproject.com/Articles/8295/MPEG-Audio-Frame-Header#SamplesPerFrame
-func getSamples(mpegVer, layer uint8) int {
+func getSamplesPerFrame(mpegVer, layer uint8) int {
 	var samples int
 	switch layer {
 	case layerI:
@@ -289,11 +301,20 @@ func Mp3(r *os.File) (float64, error) {
 	//                                fp
 	bitRateIndex := buf[0] >> 4
 	bitRate := getBitRate(mpegVer, layer, bitRateIndex)
+	if bitRate == 0 {
+		return 0, errors.New("invalid bit rate")
+	}
 	sampleFreqIndex := (buf[0] >> 2) & 0b000011
 	sampleRate := getSampleRate(mpegVer, sampleFreqIndex)
+	if sampleRate == 0 {
+		return 0, errors.New("invalid sample rate")
+	}
 	padding := (buf[0] >> 1) & 0b0000001
-	samples := getSamples(mpegVer, layer)
-	frameLen := frameLength(layer, padding, samples, bitRate, sampleRate)
+	samplesPerFrame := getSamplesPerFrame(mpegVer, layer)
+	frameLen := frameLength(layer, padding, samplesPerFrame, bitRate, sampleRate)
+	if frameLen == 0 {
+		return 0, errors.New("invalid frame length")
+	}
 	_, err = io.ReadFull(r, buf)
 	if err != nil {
 		return 0, err
@@ -323,14 +344,14 @@ func Mp3(r *os.File) (float64, error) {
 		if err != nil {
 			return 0, err
 		}
-		duration = float64(samples) / float64(sampleRate) * float64(v.totalFrame)
+		duration = float64(samplesPerFrame) / float64(sampleRate) * float64(v.totalFrame)
 		return duration, err
 	case "Xing", "Info":
 		x, err := parseXing(r)
 		if err != nil {
 			return 0, err
 		}
-		duration = float64(samples) / float64(sampleRate) * float64(x.totalFrame)
+		duration = float64(samplesPerFrame) / float64(sampleRate) * float64(x.totalFrame)
 		return duration, nil
 	}
 	fi, err := r.Stat()
@@ -338,6 +359,6 @@ func Mp3(r *os.File) (float64, error) {
 		return 0, err
 	}
 	audioDataSize := fi.Size() - int64(readByteCount-1)
-	duration = float64(audioDataSize) / float64(frameLen) * float64(samples) / float64(sampleRate)
+	duration = float64(audioDataSize) / float64(frameLen) * float64(samplesPerFrame) / float64(sampleRate)
 	return duration, nil
 }
