@@ -247,7 +247,7 @@ func Mp3(r *os.File) (float64, error) {
 	id3v2headbuf := make([]byte, 10)
 	var err error = nil
 	preHead := false
-	var readByteCount uint32 = 0
+	var firstFrameStartPos uint32 = 0
 	// var frameCount uint32 = 0
 	var duration float64 = 0
 
@@ -259,7 +259,7 @@ func Mp3(r *os.File) (float64, error) {
 	if string(id3v2headbuf[0:3]) == "ID3" {
 		id3v2offset := parseID3v2Length(id3v2headbuf)
 		r.Seek(id3v2offset, io.SeekCurrent)
-		readByteCount += uint32(id3v2offset)
+		firstFrameStartPos = uint32(len(id3v2headbuf)) + uint32(id3v2offset)
 	} else {
 		// no ID3v2 head
 		r.Seek(0, io.SeekStart)
@@ -271,6 +271,7 @@ func Mp3(r *os.File) (float64, error) {
 			return 0, err
 		}
 		if preHead && (buf[0]>>5) == 0b111 {
+			firstFrameStartPos--
 			break
 		} else {
 			preHead = false
@@ -278,9 +279,9 @@ func Mp3(r *os.File) (float64, error) {
 		if buf[0] == 0xFF {
 			preHead = true
 		}
-		readByteCount++
+		firstFrameStartPos++
 	}
-	readByteCount++
+
 	// 1111 1111, 111B BCCD, EEEE FFGH, IIJJ KLMM
 	//                     ^
 	//             buf[0]  |
@@ -289,12 +290,11 @@ func Mp3(r *os.File) (float64, error) {
 	mpegVer := (buf[0] >> 3) & 0b00011
 	layer := (buf[0] & 0b00000110) >> 1
 	protection := (buf[0] & 0x1)
-	// buf[0] = 0
+
 	_, err = io.ReadFull(r, buf)
 	if err != nil {
 		return 0, err
 	}
-	readByteCount++
 	// 1111 1111, 111B BCCD, EEEE FFGH, IIJJ KLMM
 	//                                ^
 	//                        buf[0]  |
@@ -315,16 +315,17 @@ func Mp3(r *os.File) (float64, error) {
 	if frameLen == 0 {
 		return 0, errors.New("invalid frame length")
 	}
+
 	_, err = io.ReadFull(r, buf)
 	if err != nil {
 		return 0, err
 	}
-	readByteCount++
 	// 1111 1111, 111B BCCD, EEEE FFGH, IIJJ KLMM
 	//                                           ^
 	//                                   buf[0]  |
 	//                                           fp
 	mode := buf[0] >> 6
+
 	// Jump 16-bit CRC after the 4 bytes MPEG header, if has
 	if protection == 0 {
 		r.Seek(2, io.SeekCurrent)
@@ -333,6 +334,9 @@ func Mp3(r *os.File) (float64, error) {
 	if layer == layerIII {
 		r.Seek(getSideInfoLen(mpegVer, mode), io.SeekCurrent)
 	}
+
+	totalFrame := uint32(0)
+
 	buf4 := make([]byte, 4)
 	_, err = io.ReadFull(r, buf4)
 	if err != nil {
@@ -344,21 +348,22 @@ func Mp3(r *os.File) (float64, error) {
 		if err != nil {
 			return 0, err
 		}
-		duration = float64(samplesPerFrame) / float64(sampleRate) * float64(v.totalFrame)
-		return duration, err
+		totalFrame = v.totalFrame
 	case "Xing", "Info":
 		x, err := parseXing(r)
 		if err != nil {
 			return 0, err
 		}
-		duration = float64(samplesPerFrame) / float64(sampleRate) * float64(x.totalFrame)
-		return duration, nil
+		totalFrame = x.totalFrame
+	default:
+		fi, err := r.Stat()
+		if err != nil {
+			return 0, err
+		}
+		audioDataSize := fi.Size() - int64(firstFrameStartPos)
+		totalFrame = uint32(audioDataSize / int64(frameLen))
 	}
-	fi, err := r.Stat()
-	if err != nil {
-		return 0, err
-	}
-	audioDataSize := fi.Size() - int64(readByteCount-1)
-	duration = float64(audioDataSize) / float64(frameLen) * float64(samplesPerFrame) / float64(sampleRate)
+
+	duration = (float64(samplesPerFrame) / float64(sampleRate)) * float64(totalFrame)
 	return duration, nil
 }

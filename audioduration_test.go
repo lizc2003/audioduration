@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-const delta = 1e-2
+const delta = 0.0001
 
 type audioTest struct {
 	path     string
@@ -14,7 +14,7 @@ type audioTest struct {
 }
 
 func TestFLAC(t *testing.T) {
-	var sampleDuration float64 = 3.3993650793650794
+	var sampleDuration float64 = 3.399365
 	testFile := "samples/sample.flac"
 	file, err := os.Open(testFile)
 	if err != nil {
@@ -32,7 +32,7 @@ func TestFLAC(t *testing.T) {
 }
 
 func TestMp4(t *testing.T) {
-	var sampleDuration float64 = 3.4133333333333336
+	var sampleDuration float64 = 3.413333
 	testFile := "samples/sample.mp4"
 	file, err := os.Open(testFile)
 	if err != nil {
@@ -50,7 +50,7 @@ func TestMp4(t *testing.T) {
 }
 
 func TestM4a(t *testing.T) {
-	var sampleDuration float64 = 3.4133333333333336
+	var sampleDuration float64 = 3.413333
 	testFile := "samples/sample.m4a"
 	file, err := os.Open(testFile)
 	if err != nil {
@@ -74,8 +74,8 @@ func TestMp3FileSet(t *testing.T) {
 		// https://commons.wikimedia.org/w/index.php?title=File%3ABWV_543-prelude.ogg
 		"MPEG Layer 3 (VBR)": {"samples/sample_vbr.mp3", 3.030204},
 		// https://github.com/dhowden/tag/tree/master/testdata
-		"MP3 with ID3 tags":    {"samples/sample.id3v24.mp3", 3.4560563793862875},
-		"MP3 without ID3 tags": {"samples/sample.mp3", 3.4560563793862875},
+		"MP3 with ID3 tags":    {"samples/sample.id3v24.mp3", 3.448125},
+		"MP3 without ID3 tags": {"samples/sample.mp3", 3.448125},
 	}
 	for k, v := range testFileSet {
 		fmt.Printf("Testing: %s\n", k)
@@ -111,7 +111,7 @@ func TestMp2(t *testing.T) {
 }
 
 func TestOgg(t *testing.T) {
-	var sampleDuration float64 = 6.104036281179138
+	var sampleDuration float64 = 6.104036
 	// https://commons.wikimedia.org/wiki/File:Example.ogg
 	// https://upload.wikimedia.org/wikipedia/commons/c/c8/Example.ogg
 	testFile := "samples/example.ogg"
@@ -132,7 +132,7 @@ func TestOgg(t *testing.T) {
 
 func TestDSD(t *testing.T) {
 	// t.SkipNow()
-	var sampleDuration float64 = 1.468
+	var sampleDuration float64 = 1.4685
 	testFile := "samples/sample.dsf"
 	file, err := os.Open(testFile)
 	if err != nil {
