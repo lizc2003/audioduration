@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"os"
 )
 
 type mp3Hdr uint32
@@ -242,7 +241,7 @@ func parseID3v2Length(headbuf []byte) (offset int64) {
 }
 
 // Mp3 Calculate mp3 files duration.
-func Mp3(r *os.File) (float64, error) {
+func Mp3(r io.ReadSeeker) (float64, error) {
 	buf := make([]byte, 1)
 	id3v2headbuf := make([]byte, 10)
 	var err error = nil
@@ -258,7 +257,9 @@ func Mp3(r *os.File) (float64, error) {
 	}
 	if string(id3v2headbuf[0:3]) == "ID3" {
 		id3v2offset := parseID3v2Length(id3v2headbuf)
-		r.Seek(id3v2offset, io.SeekCurrent)
+		if _, err := r.Seek(id3v2offset, io.SeekCurrent); err != nil {
+			return 0, err
+		}
 		firstFrameStartPos = uint32(len(id3v2headbuf)) + uint32(id3v2offset)
 	} else {
 		// no ID3v2 head
@@ -356,11 +357,11 @@ func Mp3(r *os.File) (float64, error) {
 		}
 		totalFrame = x.totalFrame
 	default:
-		fi, err := r.Stat()
+		fSize, err := r.Seek(0, io.SeekEnd)
 		if err != nil {
 			return 0, err
 		}
-		audioDataSize := fi.Size() - int64(firstFrameStartPos)
+		audioDataSize := fSize - int64(firstFrameStartPos)
 		totalFrame = uint32(audioDataSize / int64(frameLen))
 	}
 

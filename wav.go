@@ -4,13 +4,12 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"os"
 )
 
 // Wav Calculate wav files duration.
 // It parses RIFF/WAVE with fmt and data chunks. PCM and non-PCM
 // with block alignment are supported via byteRate/blockAlign.
-func Wav(r *os.File) (float64, error) {
+func Wav(r io.ReadSeeker) (float64, error) {
 	buf4 := make([]byte, 4)
 	buf2 := make([]byte, 2)
 

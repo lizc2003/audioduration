@@ -2,6 +2,7 @@ package audioduration
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"testing"
 )
@@ -26,7 +27,7 @@ func TestFLAC(t *testing.T) {
 	if err != nil {
 		t.Errorf("%s\n", err)
 	}
-	if (d - sampleDuration) > delta {
+	if math.Abs(d-sampleDuration) > delta {
 		t.Errorf("too much error, expected '%v', found '%v'\n", sampleDuration, d)
 	}
 }
@@ -44,7 +45,7 @@ func TestMp4(t *testing.T) {
 	if err != nil {
 		t.Errorf("%s\n", err)
 	}
-	if (d - sampleDuration) > delta {
+	if math.Abs(d-sampleDuration) > delta {
 		t.Errorf("too much error, expected '%v', found '%v'\n", sampleDuration, d)
 	}
 }
@@ -62,7 +63,7 @@ func TestM4a(t *testing.T) {
 	if err != nil {
 		t.Errorf("%s\n", err)
 	}
-	if (d - sampleDuration) > delta {
+	if math.Abs(d-sampleDuration) > delta {
 		t.Errorf("too much error, expected '%v', found '%v'\n", sampleDuration, d)
 	}
 }
@@ -89,7 +90,7 @@ func TestMp3FileSet(t *testing.T) {
 		if err != nil {
 			t.Errorf("Sample MP3 file(%s): %s.\n", v.path, err)
 		}
-		if (d - v.duration) > delta {
+		if math.Abs(d-v.duration) > delta {
 			t.Errorf("too much error, expected '%v', found '%v' on item '%v'\n", v.duration, d, k)
 		}
 	}
@@ -125,7 +126,7 @@ func TestOgg(t *testing.T) {
 	if err != nil {
 		t.Errorf("Sample OGG file(%s): %s.\n", testFile, err)
 	}
-	if (d - sampleDuration) > delta {
+	if math.Abs(d-sampleDuration) > delta {
 		t.Errorf("too much error, expected '%v', found '%v'\n", sampleDuration, d)
 	}
 }
@@ -144,7 +145,25 @@ func TestDSD(t *testing.T) {
 	if err != nil {
 		t.Errorf("Sample DSD file(%s): %s.\n", testFile, err)
 	}
-	if (d - sampleDuration) > delta {
+	if math.Abs(d-sampleDuration) > delta {
+		t.Errorf("too much error, expected '%v', found '%v'\n", sampleDuration, d)
+	}
+}
+
+func TestAac(t *testing.T) {
+	var sampleDuration float64 = 2.020136
+	testFile := "samples/sample.aac"
+	file, err := os.Open(testFile)
+	if err != nil {
+		t.Errorf("Sample aac file(%s): %s.\n", testFile, err)
+	}
+	d, err := AAC(file)
+	defer file.Close()
+	fmt.Println(sampleDuration, d)
+	if err != nil {
+		t.Errorf("Sample aac file(%s): %s.\n", testFile, err)
+	}
+	if math.Abs(d-sampleDuration) > delta {
 		t.Errorf("too much error, expected '%v', found '%v'\n", sampleDuration, d)
 	}
 }

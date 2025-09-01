@@ -3,7 +3,6 @@ package audioduration
 import (
 	"fmt"
 	"io"
-	"os"
 )
 
 // File Type Constant
@@ -14,10 +13,11 @@ const (
 	TypeOgg  int = 3
 	TypeDsd  int = 4
 	TypeWav  int = 5
+	TypeAac  int = 6
 )
 
 // Duration Get duration of specific music file type.
-func Duration(file *os.File, filetype int) (float64, error) {
+func Duration(file io.ReadSeeker, filetype int) (float64, error) {
 	var d float64 = 0
 	var err error = nil
 	file.Seek(0, io.SeekStart)
@@ -34,6 +34,8 @@ func Duration(file *os.File, filetype int) (float64, error) {
 		d, err = DSD(file)
 	case TypeWav:
 		d, err = Wav(file)
+	case TypeAac:
+		d, err = AAC(file)
 	default:
 		err = fmt.Errorf("unsupported type: %d", filetype)
 	}
