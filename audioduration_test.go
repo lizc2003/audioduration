@@ -167,3 +167,21 @@ func TestAac(t *testing.T) {
 		t.Errorf("too much error, expected '%v', found '%v'\n", sampleDuration, d)
 	}
 }
+
+func TestWebM(t *testing.T) {
+	var sampleDuration float64 = 2.028
+	testFile := "samples/sample.webm"
+	file, err := os.Open(testFile)
+	if err != nil {
+		t.Errorf("Sample webm file(%s): %s.\n", testFile, err)
+	}
+	d, err := WebM(file)
+	defer file.Close()
+	fmt.Println(sampleDuration, d)
+	if err != nil {
+		t.Errorf("Sample webm file(%s): %s.\n", testFile, err)
+	}
+	if math.Abs(d-sampleDuration) > delta {
+		t.Errorf("too much error, expected '%v', found '%v'\n", sampleDuration, d)
+	}
+}

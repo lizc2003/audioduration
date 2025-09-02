@@ -3,6 +3,7 @@ package audioduration
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 )
@@ -12,52 +13,50 @@ import (
 // Duration is a Float (4 or 8 bytes) in seconds per Matroska spec.
 
 const (
-	ebmlIdEBML    uint64 = 0x1A45DFA3
-	ebmlIdSegment uint64 = 0x18538067
-	ebmlIdInfo    uint64 = 0x1549A966
-	ebmlIdDur     uint64 = 0x4489
+	ebmlIdEBML          uint64 = 0x1A45DFA3
+	ebmlIdSegment       uint64 = 0x18538067
+	ebmlIdInfo          uint64 = 0x1549A966
+	ebmlIdDur           uint64 = 0x4489
+	ebmlIdTimeCodeScale uint64 = 0x2AD7B1
 )
 
 // WebM returns the duration in seconds by reading the EBML structure.
 func WebM(r io.ReadSeeker) (float64, error) {
-	// Reset to start
-	if _, err := r.Seek(0, io.SeekStart); err != nil {
-		return 0, err
-	}
-
-	// Scan top-level until Segment
+	first := true
 	for {
-		id, _, err := readEbmlId(r)
+		// Scan top-level until Segment
+		id, size, err := readElementHeader(r)
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
 			return 0, err
 		}
-		size, _, err := readEbmlSize(r)
-		if err != nil {
-			return 0, err
+
+		if first {
+			first = false
+			if id != ebmlIdEBML {
+				return 0, errors.New("not a valid EBML file")
+			}
 		}
 
 		switch id {
 		case ebmlIdSegment:
-			// Enter Segment content area of length `size` (unknown size allowed)
 			// We'll scan until we find Info → Duration or reach end of this segment area.
 			segStart, _ := r.Seek(0, io.SeekCurrent)
-			dur, err := readDurationInSegment(r, size)
+			segEnd := segStart + int64(size)
+
+			dur, err := readDurationInSegment(r, segEnd)
 			if err != nil {
 				return 0, err
 			}
 			if dur > 0 {
 				return dur, nil
 			}
-			// If not found, skip remainder of Segment
-			if size != ebmlUnknownSize {
-				// move to end of segment before continuing outer loop
-				end := segStart + int64(size)
-				if _, err := r.Seek(end, io.SeekStart); err != nil {
-					return 0, err
-				}
+
+			// move to end of segment before continuing outer loop
+			if _, err := r.Seek(segEnd, io.SeekStart); err != nil {
+				return 0, err
 			}
 		default:
 			// Skip other top-level elements
@@ -70,31 +69,14 @@ func WebM(r io.ReadSeeker) (float64, error) {
 	return 0, errors.New("webm duration not found")
 }
 
-const ebmlUnknownSize uint64 = ^uint64(0) >> 1 // treat unknown as very large; won't be produced by readEbmlSize though
-
-func readDurationInSegment(r io.ReadSeeker, segSize uint64) (float64, error) {
-	segStart, _ := r.Seek(0, io.SeekCurrent)
-	var limit int64 = -1
-	if segSize != ebmlUnknownSize {
-		limit = int64(segSize)
-	}
-
+func readDurationInSegment(r io.ReadSeeker, segEnd int64) (float64, error) {
 	for {
-		if limit >= 0 {
-			cur, _ := r.Seek(0, io.SeekCurrent)
-			if cur-segStart >= limit {
-				return 0, nil
-			}
+		cur, _ := r.Seek(0, io.SeekCurrent)
+		if cur >= segEnd {
+			return 0, nil
 		}
 
-		id, _, err := readEbmlId(r)
-		if err != nil {
-			if err == io.EOF {
-				return 0, nil
-			}
-			return 0, err
-		}
-		size, _, err := readEbmlSize(r)
+		id, size, err := readElementHeader(r)
 		if err != nil {
 			return 0, err
 		}
@@ -102,7 +84,8 @@ func readDurationInSegment(r io.ReadSeeker, segSize uint64) (float64, error) {
 		switch id {
 		case ebmlIdInfo:
 			infoStart, _ := r.Seek(0, io.SeekCurrent)
-			d, err := readDurationInInfo(r, size)
+			infoEnd := infoStart + int64(size)
+			d, err := readDurationInInfo(r, infoEnd)
 			if err != nil {
 				return 0, err
 			}
@@ -110,7 +93,7 @@ func readDurationInSegment(r io.ReadSeeker, segSize uint64) (float64, error) {
 				return d, nil
 			}
 			// skip rest of Info
-			if _, err := r.Seek(infoStart+int64(size), io.SeekStart); err != nil {
+			if _, err := r.Seek(infoEnd, io.SeekStart); err != nil {
 				return 0, err
 			}
 		default:
@@ -121,111 +104,133 @@ func readDurationInSegment(r io.ReadSeeker, segSize uint64) (float64, error) {
 	}
 }
 
-func readDurationInInfo(r io.ReadSeeker, infoSize uint64) (float64, error) {
-	infoStart, _ := r.Seek(0, io.SeekCurrent)
+func readDurationInInfo(r io.ReadSeeker, infoEnd int64) (float64, error) {
+	var duration float64 = 0
+	var timeScale uint64 = 1000000
+	hasDuration := false
+	hasScale := false
+
+loop:
 	for {
 		cur, _ := r.Seek(0, io.SeekCurrent)
-		if uint64(cur-infoStart) >= infoSize {
-			return 0, nil
+		if cur >= infoEnd {
+			break
 		}
-		id, _, err := readEbmlId(r)
-		if err != nil {
-			if err == io.EOF {
-				return 0, nil
-			}
-			return 0, err
-		}
-		size, _, err := readEbmlSize(r)
+
+		id, size, err := readElementHeader(r)
 		if err != nil {
 			return 0, err
 		}
-		if id == ebmlIdDur {
-			// Duration is float (4 or 8 bytes) in seconds
-			if size == 4 {
-				buf := make([]byte, 4)
-				if _, err := io.ReadFull(r, buf); err != nil {
+
+		switch id {
+		case ebmlIdDur:
+			if size == 4 || size == 8 {
+				var durationBytes [8]byte
+				_, err := io.ReadFull(r, durationBytes[:size])
+				if err != nil {
 					return 0, err
 				}
-				bits := binary.BigEndian.Uint32(buf)
-				return float64(math.Float32frombits(bits)), nil
-			}
-			if size == 8 {
-				buf := make([]byte, 8)
-				if _, err := io.ReadFull(r, buf); err != nil {
-					return 0, err
+				if size == 4 {
+					bits := binary.BigEndian.Uint32(durationBytes[:4])
+					duration = float64(math.Float32frombits(bits))
+				} else {
+					bits := binary.BigEndian.Uint64(durationBytes[:8])
+					duration = math.Float64frombits(bits)
 				}
-				bits := binary.BigEndian.Uint64(buf)
-				return math.Float64frombits(bits), nil
+
+				hasDuration = true
+				if hasScale {
+					break loop
+				}
+			} else {
+				return 0, errors.New("duration format wrong")
 			}
-			// Unsupported float size; skip
+		case ebmlIdTimeCodeScale:
+			if size > 8 || size < 1 {
+				return 0, errors.New("time code scale format wrong")
+			}
+			var scaleBytes [8]byte
+			_, err := io.ReadFull(r, scaleBytes[:size])
+			if err != nil {
+				return 0, err
+			}
+			timeScale = 0
+			for i := uint64(0); i < size; i++ {
+				timeScale = (timeScale << 8) | uint64(scaleBytes[i])
+			}
+			if timeScale == 0 {
+				return 0, errors.New("time code scale format wrong")
+			}
+
+			hasScale = true
+			if hasDuration {
+				break loop
+			}
+		default:
 			if err := skipBytes(r, int64(size)); err != nil {
 				return 0, err
 			}
-			continue
 		}
-		// Not Duration: skip
-		if err := skipBytes(r, int64(size)); err != nil {
-			return 0, err
-		}
+	}
+
+	if hasDuration {
+		return duration * float64(timeScale) / 1e9, nil
+	} else {
+		return 0, nil
 	}
 }
 
-// readEbmlId reads a variable-length EBML ID, returning its value and length in bytes.
-func readEbmlId(r io.Reader) (uint64, int, error) {
-	first := make([]byte, 1)
-	if _, err := io.ReadFull(r, first); err != nil {
+func readElementHeader(r io.Reader) (uint64, uint64, error) {
+	id, _, err := readVInt(r, false)
+	if err != nil {
 		return 0, 0, err
 	}
-	l := leadingOnePos(first[0])
-	if l == 0 {
-		return 0, 0, errors.New("invalid EBML ID leading bits")
-	}
-	idLen := l
-	buf := make([]byte, idLen-1)
-	if _, err := io.ReadFull(r, buf); err != nil {
+	size, _, err := readVInt(r, true)
+	if err != nil {
 		return 0, 0, err
 	}
-	val := uint64(first[0])
-	for _, b := range buf {
-		val = (val << 8) | uint64(b)
-	}
-	return val, idLen, nil
+	return id, size, nil
 }
 
-// readEbmlSize reads a variable-length EBML size (VINT) and returns its numeric value
-// and the byte length consumed. The marker bit in the first byte is cleared per EBML rules.
-func readEbmlSize(r io.Reader) (uint64, int, error) {
-	first := make([]byte, 1)
-	if _, err := io.ReadFull(r, first); err != nil {
+func readVInt(r io.Reader, isMask bool) (uint64, int, error) {
+	var firstByte [1]byte
+	if _, err := io.ReadFull(r, firstByte[:]); err != nil {
 		return 0, 0, err
 	}
-	l := leadingOnePos(first[0])
-	if l == 0 {
-		return 0, 0, errors.New("invalid EBML size leading bits")
+
+	first := firstByte[0]
+
+	length := 1
+	for i := 7; i >= 0; i-- {
+		if first&(1<<uint(i)) != 0 {
+			break
+		}
+		length++
 	}
-	sizeLen := l
-	mask := byte(0xFF >> sizeLen)
-	val := uint64(first[0] & mask)
-	if sizeLen > 1 {
-		buf := make([]byte, sizeLen-1)
+
+	if length > 8 {
+		return 0, 0, fmt.Errorf("VINT length too long: %d", length)
+	}
+
+	val := uint64(first)
+	if isMask {
+		mask := byte(0xFF >> length)
+		val = uint64(first & mask)
+	}
+	if length > 1 {
+		buf := make([]byte, length-1)
 		if _, err := io.ReadFull(r, buf); err != nil {
+			if err == io.ErrUnexpectedEOF {
+				err = io.EOF
+			}
 			return 0, 0, err
 		}
 		for _, b := range buf {
 			val = (val << 8) | uint64(b)
 		}
 	}
-	return val, sizeLen, nil
-}
 
-func leadingOnePos(b byte) int {
-	// returns 1..8 for the position of first '1' bit from MSB, else 0
-	for i := 0; i < 8; i++ {
-		if (b & (0x80 >> i)) != 0 {
-			return i + 1
-		}
-	}
-	return 0
+	return val, length, nil
 }
 
 func skipBytes(r io.ReadSeeker, n int64) error {
