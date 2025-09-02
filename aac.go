@@ -83,7 +83,7 @@ func AAC(r io.ReadSeeker) (float64, error) {
 
 		// aac_frame_length is 13 bits across hdr[3:6]
 		frameLen := int((uint32(hdr[3]&0x03) << 11) | (uint32(hdr[4]) << 3) | (uint32(hdr[5]) >> 5))
-		if frameLen < 7 {
+		if frameLen <= 7 {
 			return 0, errors.New("invalid AAC frame length")
 		}
 
@@ -142,5 +142,5 @@ func aacSeekNextSync(r io.ReadSeeker) error {
 }
 
 func parseADIF(r io.ReadSeeker) (float64, error) {
-	return 0, errors.New("not implemented")
+	return 0, errors.New("ADIF format not implemented")
 }

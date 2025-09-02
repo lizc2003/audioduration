@@ -14,6 +14,7 @@ const (
 	TypeDsd  int = 4
 	TypeWav  int = 5
 	TypeAac  int = 6
+	TypeWebM int = 7
 )
 
 // Duration Get duration of specific music file type.
@@ -36,6 +37,8 @@ func Duration(file io.ReadSeeker, filetype int) (float64, error) {
 		d, err = Wav(file)
 	case TypeAac:
 		d, err = AAC(file)
+	case TypeWebM:
+		d, err = WebM(file)
 	default:
 		err = fmt.Errorf("unsupported type: %d", filetype)
 	}
