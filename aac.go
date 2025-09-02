@@ -48,7 +48,7 @@ func AAC(r io.ReadSeeker) (float64, error) {
 		hdr := make([]byte, 7)
 		_, err := io.ReadFull(r, hdr)
 		if err != nil {
-			if err == io.EOF {
+			if err == io.EOF || err == io.ErrUnexpectedEOF {
 				break
 			}
 			return 0, err
@@ -61,7 +61,7 @@ func AAC(r io.ReadSeeker) (float64, error) {
 				return 0, err
 			}
 			if err := aacSeekNextSync(r); err != nil {
-				if err == io.EOF {
+				if err == io.EOF || err == io.ErrUnexpectedEOF {
 					break
 				}
 				return 0, err

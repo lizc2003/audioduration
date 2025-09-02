@@ -232,7 +232,8 @@ func parseID3v2Length(headbuf []byte) (offset int64) {
 	offset = 0
 	for i := 6; i < 10; i++ {
 		offset <<= 7
-		offset |= int64(headbuf[i])
+		// synchsafe: only low 7 bits are used per byte
+		offset |= int64(headbuf[i] & 0x7F)
 	}
 	if (headbuf[5]>>4)&0b0001 == 1 {
 		offset += 10
