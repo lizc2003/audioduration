@@ -29,6 +29,10 @@ if err != nil {
 }
 ```
 
+## Supported formats
+
+MP3, M4A, MP4, FLAC, DSF, OGG, WAV, AAC, WEBM
+
 ## License
 
 The code is licensed under GPLv3.
