@@ -25,7 +25,6 @@ func FLAC(r io.ReadSeeker) (float64, error) {
 		if err != nil {
 			break
 		}
-		// fmt.Println(buf)
 		blockType := buf[0] & 0x7f
 		var blockSize uint32 = binary.BigEndian.Uint32(buf) & 0x00FFFFFF
 		if blockType == 0 { // Metadata block type is Streaminfo
@@ -40,6 +39,8 @@ func FLAC(r io.ReadSeeker) (float64, error) {
 				append([]byte{0, 0, 0}, streamInfoBuf[13:18]...)) & 0x7ffffffff
 			duration = float64(totalSamples) / float64(sampleRate)
 			break
+		} else {
+			return 0, errors.New("unexpected block type")
 		}
 	}
 	return duration, err
